@@ -38,6 +38,14 @@
 #include <trurl/narray.h>
 #include <trurl/nstr.h>
 
+#ifdef HAVE_RPM_4_1
+#include <rpm/rpmps.h>
+#include <rpm/rpmts.h>
+#define rpmxxInitIterator(a,b,c,d) rpmtsInitIterator(a,(rpmTag)b,c,d)
+#else
+#define rpmxxInitIterator(a,b,c,d) rpmdbInitIterator(a,b,c,d)
+#endif
+
 #include <vfile/vfile.h>
 
 #include "i18n.h"
@@ -524,8 +532,12 @@ static void *install_cb(const void *h __attribute__((unused)),
 int rpm_install(rpmdb db, const char *rootdir, const char *path,
                 unsigned filterflags, unsigned transflags, unsigned instflags)
 {
-    rpmTransactionSet rpmts = NULL;
+#ifdef HAVE_RPM_4_1
+    rpmts ts = NULL;
+    rpmps probs = NULL;
+#else
     rpmProblemSet probs = NULL;
+#endif
     int issrc;
     struct vfile *vf;
     int rc;
@@ -559,10 +571,15 @@ int rpm_install(rpmdb db, const char *rootdir, const char *path,
             logn(LOGERR, _("%s: source packages not supported"), path);
             goto l_err;
         }
-        
-        rpmts = rpmtransCreateSet(db, rootdir);
+#ifdef HAVE_RPM_4_1       
+	ts = rpmtsCreate();
+	rpmtsSetRootDir(ts, rootdir);
+	rpmtsOpenDB(ts, O_RDWR);
+#else
+        ts = rpmtransCreateSet(db, rootdir);
         rc = rpmtransAddPackage(rpmts, h, vf->vf_fdt, path, 
                                 (instflags & INSTALL_UPGRADE) != 0, NULL);
+#endif
         
         headerFree(h);	
         h = NULL;
@@ -589,39 +606,66 @@ int rpm_install(rpmdb db, const char *rootdir, const char *path,
         }
 
         if ((instflags & INSTALL_NODEPS) == 0) {
+#ifdef HAVE_RPM_4_1
+	    rpmps conflicts = NULL;
+#else
 #ifdef HAVE_RPM_4_0_4
             rpmDependencyConflict conflicts = NULL;
 #else
             struct rpmDependencyConflict *conflicts = NULL;
 #endif
+#endif
             int numConflicts = 0;
-            
-            if (rpmdepCheck(rpmts, &conflicts, &numConflicts) != 0) {
+
+#ifdef HAVE_RPM_4_1
+            if (rpmdepCheck(ts, &conflicts, &numConflicts) != 0) {
                 logn(LOGERR, "%s: rpmdepCheck() failed", path);
                 goto l_err;
             }
+#else
+	    if (rpmtsCheck(ts) != 0) {
+                logn(LOGERR, "%s: rpmtsCheck() failed", path);
+                goto l_err;
+	    }
+	    conflicts = rpmtsProblems(ts);
+#endif
             
                 
             if (conflicts) {
                 FILE *fstream;
                 
                 logn(LOGERR, _("%s: failed dependencies:"), path);
-                printDepProblems(log_stream(), conflicts, numConflicts);
+#ifdef HAVE_RPM_4_1
+#define printdepProblems(file, conflicts, numConflicts) rpmpsPrint(file, conflicts)
+#define printProblems(file,probs) rpmpsPrint(file, probs)
+#define freeConflicts(conflicts, numConflicts) conflicts = rpmpsFree(conflicts)
+#else
+#define printdepProblems(file, conflicts, numConflicts) printDepProblems(file, conflicts, numConflicts)
+#define printProblems(file,probs) rpmProblemSetPrint(file, probs)
+#define freeConflicts(conflicts, numConflicts) rpmdepFreeConflicts(conflicts, numConflicts)
+#endif
+                printdepProblems(log_stream(), conflicts, numConflicts);
                 if ((fstream = log_file_stream()))
-                    printDepProblems(fstream, conflicts, numConflicts);
+                    printdepProblems(fstream, conflicts, numConflicts);
                 rpmdepFreeConflicts(conflicts, numConflicts);
                 goto l_err;
             }
         }
 
-	rc = rpmRunTransactions(rpmts, install_cb,
+#ifdef HAVE_RPM_4_1
+	rc = rpmtsRun(ts, NULL, (rpmprobFilterFlags) filterflags);
+#else
+	rc = rpmRunTransactions(ts, install_cb,
                                 (void *) ((long)instflags), 
                                 NULL, &probs, transflags, filterflags);
+#endif
 
         if (rc != 0) {
             if (rc > 0) {
                 FILE *fstream;
-                
+#ifdef HAVE_RPM_4_1
+		probs = rpmtsProblems(ts);
+#endif
                 logn(LOGERR, _("%s: installation failed:"), path);
                 rpmProblemSetPrint(log_stream(), probs);
                 if ((fstream = log_file_stream()))
@@ -636,18 +680,34 @@ int rpm_install(rpmdb db, const char *rootdir, const char *path,
     
     vfile_close(vf);
     if (probs) 
+#ifdef HAVE_RPM_4_1
+	probs = rpmpsFree(probs);
+#else
         rpmProblemSetFree(probs);
-    rpmtransFree(rpmts);
+#endif
+#ifdef HAVE_RPM_4_1
+    rpmtsFree(ts);
+#else
+    rpmtransFree(ts);
+#endif
     return 1;
     
  l_err:
     vfile_close(vf);
 
     if (probs) 
+#ifdef HAVE_RPM_4_1
+	probs = rpmpsFree(probs);
+#else
         rpmProblemSetFree(probs);
+#endif
     
-    if (rpmts)
-        rpmtransFree(rpmts);
+    if (ts)
+#ifdef HAVE_RPM_4_1
+	rpmtsFree(ts);
+#else
+        rpmtransFree(ts);
+#endif
 
     if (h)
         headerFree(h);
@@ -665,8 +725,8 @@ int rpm_dbmap(rpmdb db,
 
 #ifdef HAVE_RPM_4_0
     rpmdbMatchIterator mi;
-
-    mi = rpmdbInitIterator(db, RPMDBI_PACKAGES, NULL, 0);
+// FIXME: RPM 4.1 need rpmts as first argument not rpmdb
+    mi = rpmxxInitIterator(db, RPMDBI_PACKAGES, NULL, 0);
     while ((h = rpmdbNextIterator(mi)) != NULL) {
 	unsigned int recno = rpmdbGetIteratorOffset(mi);
 	mapfn(recno, h, arg);

@@ -19,6 +19,9 @@
 #include <netinet/in.h>
 
 #include <rpm/rpmlib.h>
+#if HAVE_RPM_4_1
+#include <rpm/rpmts.h>
+#endif
 #include <trurl/nstr.h>
 #include <trurl/nassert.h>
 
@@ -329,12 +332,21 @@ struct pkg *pkg_ldrpm(const char *path, unsigned ldflags)
     struct pkg *pkg = NULL;
     FD_t fdt;
     Header h;
+    int rc;
+#ifdef HAVE_RPM_4_1
+    rpmts ts = rpmtsCreate();
+#endif
     
     if ((fdt = Fopen(path, "r")) == NULL) 
         logn(LOGERR, "open %s: %s", path, rpmErrorString());
         
     else {
-        if (rpmReadPackageHeader(fdt, &h, NULL, NULL, NULL) != 0) {
+#ifdef HAVE_RPM_4_1
+	rc = rpmReadPackageFile(ts, fdt, path, &h);
+#else
+	rc = rpmReadPackageHeader(fdt, &h, NULL, NULL, NULL);
+#endif
+        if (rc != 0) {
             logn(LOGERR, _("%s: read header failed"), path);
             
         } else {
@@ -347,6 +359,10 @@ struct pkg *pkg_ldrpm(const char *path, unsigned ldflags)
         }
         Fclose(fdt);
     }
+
+#ifdef HAVE_RPM_4_1
+    rpmtsFree(ts);
+#endif
 
     return pkg;
 }
