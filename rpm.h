@@ -34,7 +34,7 @@ int rpm_dbmap(rpmdb db,
               void *arg);
 
 
-int rpm_get_dbdepdirs(const char *rootdir, tn_array *depdirs);
+int rpmdb_get_depdirs(const char *rootdir, tn_array *depdirs);
 
 tn_array *rpm_get_conflicted_dbpkgs(rpmdb db, const struct capreq *cap,
                                     tn_array *unistdbpkgs, unsigned ldflags);

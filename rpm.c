@@ -26,7 +26,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#ifdef HAVE_DB_185_H
+#if defined HAVE_DB_185_H && defined DUPA
 # include <db_185.h>
 #endif
 
@@ -39,11 +39,10 @@
 #include <trurl/nstr.h>
 
 #ifdef HAVE_RPM_4_1
-#include <rpm/rpmps.h>
-#include <rpm/rpmts.h>
-#define rpmxxInitIterator(a,b,c,d) rpmtsInitIterator(a,(rpmTag)b,c,d)
-#else
-#define rpmxxInitIterator(a,b,c,d) rpmdbInitIterator(a,b,c,d)
+# include <rpm/rpmts.h>
+# include <rpm/rpmps.h>
+# include <rpm/rpmdb.h>
+# include <rpm/rpmcli.h>
 #endif
 
 #include <vfile/vfile.h>
@@ -163,97 +162,6 @@ time_t rpm_dbmtime(const char *dbfull_path)
 
     return st.st_mtime;
 }
-
-/*
-  open req index directly, rpmlib API does not allow to extract
-  all requirements without reading whole headers (which is too slow)
-*/
-#ifndef HAVE_DB_185_H
-int rpm_get_dbdepdirs(const char *rootdir, tn_array *depdirs)
-{
-    rootdir = rootdir; depdirs = depdirs;
-    return -1;
-}
-
-#else 
-
-int rpm_get_dbdepdirs(const char *rootdir, tn_array *depdirs) 
-{
-    DB        *db;
-    DBT       dbt_k, dbt_d;
-    char      buf[PATH_MAX], path[PATH_MAX], *depdir;
-    char      *index, *p, *dbpath;
-    tn_array  *tmp_depdirs;
-    int       len;
-
-#ifndef HAVE___DB185_OPEN
-    return -1;
-#endif    
-    
-    index = "requirename.rpm";
-#ifdef HAVE_RPM_4_0
-    index = "Requirename";
-#endif
-    
-    if (rootdir == NULL)
-        rootdir = "/";
-    dbpath = rpm_get_dbpath();
-    snprintf(path, sizeof(path), "%s%s/%s", *(rootdir + 1) == '\0' ? "" : rootdir,
-             dbpath != NULL ? dbpath : "", index);
-    
-    if ((db = __db185_open(path, O_RDONLY, 0, DB_HASH, NULL)) == NULL)
-        return -1;
-    
-    if (db->seq(db, &dbt_k, &dbt_d, R_FIRST) != 0) {
-        db->close(db);
-        return -1;
-    }
-    
-    tmp_depdirs = n_array_new(128, NULL, (tn_fn_cmp)strcmp);
-    
-    if (dbt_k.size > 0 && *(char*)dbt_k.data == '/' && dbt_k.size < sizeof(buf)) {
-        memcpy(buf, dbt_k.data, dbt_k.size);
-        buf[dbt_k.size] = '\0';
-        DBGF("ldbreq %s\n", buf);
-        depdir = path2depdir(buf);
-        len = strlen(depdir);
-        p = alloca(len + 1);
-        memcpy(p, depdir, len + 1);
-        n_array_push(tmp_depdirs, p);
-    }
-            
-    while (db->seq(db, &dbt_k, &dbt_d, R_NEXT) == 0) {
-        if (dbt_k.size > 0 && *(char*)dbt_k.data == '/' && dbt_k.size < sizeof(buf)) {
-            memcpy(buf, dbt_k.data, dbt_k.size);
-            buf[dbt_k.size] = '\0';
-            DBGF("ldbreq %s\n", buf);
-            depdir = path2depdir(buf);
-            len = strlen(depdir);
-            p = alloca(len + 1);
-            memcpy(p, depdir, len + 1);
-            n_array_push(tmp_depdirs, p);
-        }
-    }
-    db->close(db);
-    
-
-    n_array_sort(tmp_depdirs);
-    n_array_uniq(tmp_depdirs);
-    
-    while (n_array_size(tmp_depdirs)) {
-        char *dir = n_array_shift(tmp_depdirs);
-        
-        if (n_array_bsearch(depdirs, dir) == NULL) {
-            //printf("dir = %s\n", dir);
-            n_array_push(depdirs, n_strdup(dir));
-            n_array_isort(depdirs);
-        }
-    }
-    n_array_free(tmp_depdirs);
-    //printf("s = %d\n", n_array_size(depdirs));
-    return n_array_size(depdirs);
-}
-#endif /* HAVE_DB_185_H */
 
 void rpm_closedb(rpmdb db) 
 {
@@ -529,6 +437,16 @@ static void *install_cb(const void *h __attribute__((unused)),
 }	
 
 
+#ifdef HAVE_RPM_4_1
+# define printdepProblems(file, conflicts, numConflicts) rpmpsPrint(file, conflicts)
+# define printProblems(file,probs) rpmpsPrint(file, probs)
+# define freeConflicts(conflicts, numConflicts) conflicts = rpmpsFree(conflicts)
+#else
+# define printdepProblems(file, conflicts, numConflicts) printDepProblems(file, conflicts, numConflicts)
+# define printProblems(file,probs) rpmProblemSetPrint(file, probs)
+# define freeConflicts(conflicts, numConflicts) rpmdepFreeConflicts(conflicts, numConflicts)
+#endif
+
 int rpm_install(rpmdb db, const char *rootdir, const char *path,
                 unsigned filterflags, unsigned transflags, unsigned instflags)
 {
@@ -538,7 +456,6 @@ int rpm_install(rpmdb db, const char *rootdir, const char *path,
 #else
     rpmProblemSet probs = NULL;
 #endif
-    int issrc;
     struct vfile *vf;
     int rc;
     Header h = NULL;
@@ -550,7 +467,7 @@ int rpm_install(rpmdb db, const char *rootdir, const char *path,
     if ((vf = vfile_open(path, VFT_RPMIO, VFM_RO | VFM_STBRN)) == NULL)
         return 0;
     
-    rc = rpmReadPackageHeader(vf->vf_fdt, &h, &issrc, NULL, NULL);
+    rc = rpm_headerReadFD(vf->vf_fdt, &h, NULL);
     
     if (rc != 0) {
         switch (rc) {
@@ -567,7 +484,7 @@ int rpm_install(rpmdb db, const char *rootdir, const char *path,
         n_assert(0);
         
     } else {
-        if (issrc) {
+        if (rpm_headerIsSource(h)) {
             logn(LOGERR, _("%s: source packages not supported"), path);
             goto l_err;
         }
@@ -609,45 +526,42 @@ int rpm_install(rpmdb db, const char *rootdir, const char *path,
 #ifdef HAVE_RPM_4_1
 	    rpmps conflicts = NULL;
 #else
-#ifdef HAVE_RPM_4_0_4
+# ifdef HAVE_RPM_4_0_4
             rpmDependencyConflict conflicts = NULL;
-#else
+# else /* rpm 3.x */
             struct rpmDependencyConflict *conflicts = NULL;
-#endif
+# endif
 #endif
             int numConflicts = 0;
 
 #ifdef HAVE_RPM_4_1
-            if (rpmdepCheck(ts, &conflicts, &numConflicts) != 0) {
-                logn(LOGERR, "%s: rpmdepCheck() failed", path);
-                goto l_err;
-            }
-#else
 	    if (rpmtsCheck(ts) != 0) {
                 logn(LOGERR, "%s: rpmtsCheck() failed", path);
                 goto l_err;
 	    }
 	    conflicts = rpmtsProblems(ts);
+            numConflicts = rpmpsNumProblems(conflicts);
+#else
+            if (rpmdepCheck(ts, &conflicts, &numConflicts) != 0) {
+                logn(LOGERR, "%s: rpmdepCheck() failed", path);
+                goto l_err;
+            }            
 #endif
-            
                 
             if (conflicts) {
                 FILE *fstream;
                 
                 logn(LOGERR, _("%s: failed dependencies:"), path);
-#ifdef HAVE_RPM_4_1
-#define printdepProblems(file, conflicts, numConflicts) rpmpsPrint(file, conflicts)
-#define printProblems(file,probs) rpmpsPrint(file, probs)
-#define freeConflicts(conflicts, numConflicts) conflicts = rpmpsFree(conflicts)
-#else
-#define printdepProblems(file, conflicts, numConflicts) printDepProblems(file, conflicts, numConflicts)
-#define printProblems(file,probs) rpmProblemSetPrint(file, probs)
-#define freeConflicts(conflicts, numConflicts) rpmdepFreeConflicts(conflicts, numConflicts)
-#endif
+                
+
                 printdepProblems(log_stream(), conflicts, numConflicts);
                 if ((fstream = log_file_stream()))
                     printdepProblems(fstream, conflicts, numConflicts);
+#ifdef HAVE_RPM_4_1
+                rpmpsFree(conflicts);
+#else                
                 rpmdepFreeConflicts(conflicts, numConflicts);
+#endif                
                 goto l_err;
             }
         }
@@ -667,9 +581,9 @@ int rpm_install(rpmdb db, const char *rootdir, const char *path,
 		probs = rpmtsProblems(ts);
 #endif
                 logn(LOGERR, _("%s: installation failed:"), path);
-                rpmProblemSetPrint(log_stream(), probs);
+                printProblems(log_stream(), probs);
                 if ((fstream = log_file_stream()))
-                    rpmProblemSetPrint(fstream, probs);
+                    printProblems(fstream, probs);
                 goto l_err;
             } else {
                 logn(LOGERR, _("%s: installation failed (hgw why)"), path);
@@ -725,11 +639,14 @@ int rpm_dbmap(rpmdb db,
 
 #ifdef HAVE_RPM_4_0
     rpmdbMatchIterator mi;
-// FIXME: RPM 4.1 need rpmts as first argument not rpmdb
-    mi = rpmxxInitIterator(db, RPMDBI_PACKAGES, NULL, 0);
+    mi = rpmdbInitIterator(db, RPMDBI_PACKAGES, NULL, 0);
     while ((h = rpmdbNextIterator(mi)) != NULL) {
 	unsigned int recno = rpmdbGetIteratorOffset(mi);
-	mapfn(recno, h, arg);
+#ifdef HAVE_RPM_4_1             /* omit pubkeys */
+        if (headerIsEntry(h, RPMTAG_PUBKEYS))
+            continue;
+#endif        
+        mapfn(recno, h, arg);
 	n++;
     }
     rpmdbFreeIterator(mi);
@@ -964,10 +881,10 @@ tn_array *rpm_get_provides_dbpkgs(rpmdb db, const struct capreq *cap,
 
 /* rpmlib's rpmCheckSig reports success when GPG signature is missing,
    so it is useless for real sig verification */
-#ifndef HAVE_RPM_4_0
+#if !defined HAVE_RPM_4_0 || defined HAVE_RPM_4_1
 static int rpm_signatures(const char *path, unsigned *signature_flags)
 {
-    *signature_flags = CHECKSIG_MD5;
+    //*signature_flags = CHECKSIG_MD5;
     path = path;
     return 1;
 }

@@ -167,7 +167,7 @@ if test ${is_rpm4}. = yes. ; then
 		AC_DEFINE([HAVE_RPM_EXTDEPS])
 	fi
 
-	AC_MSG_CHECKING([for rpm 4.0.4])
+	AC_MSG_CHECKING([for rpm >= 4.0.4])
 	AC_EGREP_CPP(RPMSENSE_KEYRING,
 		[ #include <rpm/rpmcli.h>
 		], is_rpm4_0_4=yes, is_rpm4_0_4=no)
