@@ -1,0 +1,618 @@
+Index: ask.c
+===================================================================
+RCS file: /cvsroot/installer/poldek/ask.c,v
+retrieving revision 1.4
+diff -u -r1.4 ask.c
+--- ask.c	22 May 2002 16:14:09 -0000	1.4
++++ ask.c	12 Oct 2004 20:55:55 -0000
+@@ -41,7 +41,7 @@
+         return default_a;               /* yes */
+ 
+     va_start(args, fmt);
+-    vlog(LOGINFO, 0, fmt, args);
++    poldek_vlog(LOGINFO, 0, fmt, args);
+     va_end(args);
+     
+     a = askuser(STDIN_FILENO, "YyNn\n", NULL);
+Index: install.c
+===================================================================
+RCS file: /cvsroot/installer/poldek/Attic/install.c,v
+retrieving revision 1.13.6.1
+diff -u -r1.13.6.1 install.c
+--- install.c	28 Jun 2004 20:19:28 -0000	1.13.6.1
++++ install.c	12 Oct 2004 20:55:55 -0000
+@@ -36,7 +36,7 @@
+ static
+ int mkdbdir(const char *rootdir) 
+ {
+-    char path[PATH_MAX], *dbpath;
++    char *dbpath;
+     int rc;
+ 
+     dbpath = rpm_get_dbpath();
+Index: log.c
+===================================================================
+RCS file: /cvsroot/installer/poldek/log.c,v
+retrieving revision 1.21
+diff -u -r1.21 log.c
+--- log.c	17 Oct 2002 10:50:23 -0000	1.21
++++ log.c	12 Oct 2004 20:55:56 -0000
+@@ -36,29 +36,29 @@
+ static FILE      *l_stream = NULL, *l_fstream = NULL;
+ 
+ 
+-static void vlog_tty(int pri, const char *fmt, va_list args);
++static void poldek_vlog_tty(int pri, const char *fmt, va_list args);
+ 
+ 
+-void log(int pri, const char *fmt, ...)
++void poldek_log(int pri, const char *fmt, ...)
+ {
+     va_list args;
+ 
+     va_start(args, fmt);
+-    vlog(pri, 0, fmt, args);
++    poldek_vlog(pri, 0, fmt, args);
+     va_end(args);
+ }
+ 
+-void log_i(int pri, int indent, const char *fmt, ...)
++void poldek_log_i(int pri, int indent, const char *fmt, ...)
+ {
+     va_list args;
+ 
+     va_start(args, fmt);
+-    vlog(pri, indent, fmt, args);
++    poldek_vlog(pri, indent, fmt, args);
+     va_end(args);
+ }
+ 
+ 
+-void vlog(int pri, int indent, const char *fmt, va_list args)
++void poldek_vlog(int pri, int indent, const char *fmt, va_list args)
+ {
+     static int last_endlined = 1;
+     char buf[1024], tmp_fmt[1024];
+@@ -114,7 +114,7 @@
+     if (flags & LOGTTY) {
+         fprintf(l_stream, "%s", buf);
+         if (*fmt)
+-            vlog_tty(pri, fmt, args);
++            poldek_vlog_tty(pri, fmt, args);
+         fflush(l_stream);
+     }
+ 
+@@ -149,47 +149,47 @@
+ }
+ 
+ 
+-void log_msg(const char *fmt, ...) 
++void poldek_log_msg(const char *fmt, ...) 
+ {
+     va_list args;
+     if (verbose > -1) {
+         va_start(args, fmt);
+-        vlog(LOGINFO, 0, fmt, args);
++        poldek_vlog(LOGINFO, 0, fmt, args);
+         va_end(args);
+     }
+ }
+ 
+-void log_err(const char *fmt, ...) 
++void poldek_log_err(const char *fmt, ...) 
+ {
+     va_list args;
+     if (verbose > -1) {
+         va_start(args, fmt);
+-        vlog(LOGERR, 0, fmt, args);
++        poldek_vlog(LOGERR, 0, fmt, args);
+         va_end(args);
+     }
+ }
+ 
+-void log_tty(const char *fmt, ...)
++void poldek_log_tty(const char *fmt, ...)
+ {
+     va_list args;
+     if (verbose > -1) {
+         va_start(args, fmt);
+-        vlog_tty(LOGINFO, fmt, args);
++        poldek_vlog_tty(LOGINFO, fmt, args);
+         va_end(args);
+     }
+ }
+ 
+-void log_msg_i(int indent, const char *fmt, ...) 
++void poldek_log_msg_i(int indent, const char *fmt, ...) 
+ {
+     va_list args;
+     
+     va_start(args, fmt);
+-    vlog(LOGINFO, indent, fmt, args);
++    poldek_vlog(LOGINFO, indent, fmt, args);
+     va_end(args);
+ }
+ 
+ 
+-int log_init(const char *pathname, FILE *tty, char *prefix)
++int poldek_log_init(const char *pathname, FILE *tty, char *prefix)
+ {
+     int is_not_stdstream = l_stream != stdout && l_stream != stderr;
+ 
+@@ -214,7 +214,7 @@
+ }
+ 
+ 
+-void log_closelog(void)
++void poldek_log_closelog(void)
+ {
+     if (l_stream != NULL && l_stream != stdout && l_stream != stderr) 
+ 	fclose(l_stream);
+@@ -228,24 +228,24 @@
+ }
+ 
+ 
+-FILE *log_stream(void) 
++FILE *poldek_log_stream(void) 
+ {
+     return l_stream ? l_stream : stdout;
+ }
+ 
+ 
+-FILE *log_file_stream(void) 
++FILE *poldek_log_file_stream(void) 
+ {
+     return l_fstream;
+ }
+ 
+-int log_enabled_filelog(void)
++int poldek_log_enabled_filelog(void)
+ {
+     return l_fstream != NULL;
+ }
+ 
+ static
+-void vlog_tty(int pri, const char *fmt, va_list args)
++void poldek_vlog_tty(int pri, const char *fmt, va_list args)
+ {
+     char buf[2048];
+     int n = 0;
+Index: log.h
+===================================================================
+RCS file: /cvsroot/installer/poldek/log.h,v
+retrieving revision 1.15
+diff -u -r1.15 log.h
+--- log.h	17 Oct 2002 10:50:23 -0000	1.15
++++ log.h	12 Oct 2004 20:55:56 -0000
+@@ -29,65 +29,65 @@
+ 
+ extern int verbose;
+ 
+-int log_init(const char *pathname, FILE *tty, char *prefix);
+-void log_closelog(void);
+-int log_enabled_filelog(void);
++int poldek_log_init(const char *pathname, FILE *tty, char *prefix);
++void poldek_log_closelog(void);
++int poldek_log_enabled_filelog(void);
+ 
+-FILE *log_stream(void);
+-FILE *log_file_stream(void);
++FILE *poldek_log_stream(void);
++FILE *poldek_log_file_stream(void);
+ 
+ 
+-void log(int pri, const char *fmt, ...)
++void poldek_log(int pri, const char *fmt, ...)
+    __attribute__((format(printf,2,3)));
+    
+-void log_i(int pri, int indent, const char *fmt, ...)
++void poldek_log_i(int pri, int indent, const char *fmt, ...)
+    __attribute__((format(printf,3,4)));
+    
+-void vlog(int pri, int indent, const char *fmt, va_list args);
++void poldek_vlog(int pri, int indent, const char *fmt, va_list args);
+ 
+ #define logn(pri, fmt, args...) \
+-       log(pri | LOGOPT_N, fmt, ## args)
++       poldek_log(pri | LOGOPT_N, fmt, ## args)
+ 
+ #define log_debug(fmt, args...) \
+-  log(LOG_DEBUG, "%s: " fmt, __FUNCTION__ , ## args)
++  poldek_log(LOG_DEBUG, "%s: " fmt, __FUNCTION__ , ## args)
+ 
+ #define logv(verbose_level, pri, indent, fmt, args...)   \
+   do {                                     \
+     if ((verbose_level) <= verbose)        \
+-      vlog(pri, fmt, ## args);             \
++      poldek_vlog(pri, fmt, ## args);             \
+   } while(0)
+ 
+-void log_err(const char *fmt, ...)
++void poldek_log_err(const char *fmt, ...)
+   __attribute__((format(printf,1,2)));
+-void log_msg(const char *fmt, ...)
++void poldek_log_msg(const char *fmt, ...)
+   __attribute__((format(printf,1,2))); 
+-void log_msg_i(int indent, const char *fmt, ...)
++void poldek_log_msg_i(int indent, const char *fmt, ...)
+   __attribute__((format(printf,2,3)));
+-void log_tty(const char *fmt, ...)  
++void poldek_log_tty(const char *fmt, ...)  
+   __attribute__((format(printf,1,2)));
+   
+ #define msg(verbose_level, fmt, args...)   \
+   do {                                     \
+     if ((verbose_level) <= verbose)        \
+-      log(LOGINFO, fmt, ## args);       \
++      poldek_log(LOGINFO, fmt, ## args);       \
+   } while(0)
+ 
+ #define msgn(verbose_level, fmt, args...)        \
+   do {                                           \
+     if ((verbose_level) <= verbose)              \
+-      log(LOGINFO|LOGOPT_N, fmt, ## args);       \
++      poldek_log(LOGINFO|LOGOPT_N, fmt, ## args);       \
+   } while(0)
+ 
+ #define msg_i(verbose_level, indent, fmt, args...)   \
+   do {                                               \
+     if ((verbose_level) <= verbose)                  \
+-      log_i(LOGINFO, indent, fmt, ## args);          \
++      poldek_log_i(LOGINFO, indent, fmt, ## args);          \
+   } while(0)
+ 
+ #define msgn_i(verbose_level, indent, fmt, args...)  \
+   do {                                               \
+     if ((verbose_level) <= verbose)                  \
+-      log_i(LOGINFO|LOGOPT_N, indent, fmt, ## args); \
++      poldek_log_i(LOGINFO|LOGOPT_N, indent, fmt, ## args); \
+   } while(0)
+ 
+ 
+@@ -95,13 +95,13 @@
+ #define msg_f(verbose_level, fmt, args...)           \
+   do {                                               \
+     if ((verbose_level) <= verbose)                  \
+-      log(LOGFILE|LOGINFO, fmt, ## args);            \
++      poldek_log(LOGFILE|LOGINFO, fmt, ## args);            \
+   } while(0)
+ 
+ #define msgn_f(verbose_level, fmt, args...)           \
+   do {                                                \
+     if ((verbose_level) <= verbose)                   \
+-      log(LOGFILE|LOGINFO|LOGOPT_N, fmt, ## args);    \
++      poldek_log(LOGFILE|LOGINFO|LOGOPT_N, fmt, ## args);    \
+   } while(0)
+ 
+ 
+@@ -109,7 +109,7 @@
+ #define msg_tty(verbose_level, fmt, args...)         \
+   do {                                               \
+     if ((verbose_level) <= verbose)                  \
+-      log(LOGTTY|LOGINFO, fmt, ## args);             \
++      poldek_log(LOGTTY|LOGINFO, fmt, ## args);             \
+   } while(0)
+ 
+ 
+@@ -117,7 +117,7 @@
+ #define msgn_tty(verbose_level, fmt, args...)         \
+   do {                                                \
+     if ((verbose_level) <= verbose)                   \
+-      log(LOGTTY|LOGINFO|LOGOPT_N, fmt, ## args);     \
++      poldek_log(LOGTTY|LOGINFO|LOGOPT_N, fmt, ## args);     \
+   } while(0)
+ 
+ 
+Index: main.c
+===================================================================
+RCS file: /cvsroot/installer/poldek/Attic/main.c,v
+retrieving revision 1.110.4.15
+diff -u -r1.110.4.15 main.c
+--- main.c	2 Jul 2004 17:42:39 -0000	1.110.4.15
++++ main.c	12 Oct 2004 20:56:00 -0000
+@@ -1478,9 +1478,9 @@
+             args.inst.rootdir = n_strdup(ppath);
+     }
+     
+-    vfile_msg_fn = log_msg;
+-    vfile_msgtty_fn = log_tty;
+-    vfile_err_fn = log_err;
++    vfile_msg_fn = poldek_log_msg;
++    vfile_msgtty_fn = poldek_log_tty;
++    vfile_err_fn = poldek_log_err;
+ }
+ 
+ 
+@@ -1516,7 +1516,6 @@
+ static int do_merge(tn_array *sources, unsigned psflags) 
+ {
+     struct pkgset *ps_src, *ps_dst;
+-    struct source *src;
+     tn_array      *dst_sources;
+     int           rc = 1;
+ 
+@@ -1952,7 +1951,7 @@
+ 
+     mem_info_verbose = -1;
+ 
+-    log_init(NULL, stdout, logprefix);
++    poldek_log_init(NULL, stdout, logprefix);
+     self_init();
+ 
+     setlocale(LC_MESSAGES, "");
+@@ -1962,14 +1961,14 @@
+     translate_argp_options(options);
+     
+     term_init();
+-    log_init(NULL, stdout, logprefix);
++    poldek_log_init(NULL, stdout, logprefix);
+     parse_options(argc, argv);
+ 
+     
+     if (args.log_path) {
+         int i;
+         
+-        log_init(args.log_path, stdout, logprefix);
++        poldek_log_init(args.log_path, stdout, logprefix);
+         
+         msg_f(0, "\n");
+         msg_f(0, "Start (%s", argv[0]);
+Index: pkgdb.c
+===================================================================
+RCS file: /cvsroot/installer/poldek/Attic/pkgdb.c,v
+retrieving revision 1.6.6.1
+diff -u -r1.6.6.1 pkgdb.c
+--- pkgdb.c	28 Jun 2004 20:19:28 -0000	1.6.6.1
++++ pkgdb.c	12 Oct 2004 20:56:00 -0000
+@@ -34,7 +34,7 @@
+         return NULL;
+ 
+     db->mode = mode;
+-    db->path = path;
++    db->path = n_strdup(path);
+     if (rootdir)
+         db->rootdir = n_strdup(rootdir);
+     else
+Index: pkgset-order.c
+===================================================================
+RCS file: /cvsroot/installer/poldek/pkgset-order.c,v
+retrieving revision 1.16.4.1
+diff -u -r1.16.4.1 pkgset-order.c
+--- pkgset-order.c	2 Jul 2004 17:08:20 -0000	1.16.4.1
++++ pkgset-order.c	12 Oct 2004 20:56:01 -0000
+@@ -147,13 +147,13 @@
+ 
+                     } else {
+                         int i;
+-                        log(LOGERR, _("PreReq loop: "));
+-                        log(LOGERR, "_%s", rp->pkg->name);
++                        poldek_log(LOGERR, _("PreReq loop: "));
++                        poldek_log(LOGERR, "_%s", rp->pkg->name);
+                         for (i=n_array_size(vs->stack)-1; i >= 0; i--) {
+                             struct pkg *p = n_array_nth(vs->stack, i);
+-                            log(LOGERR, "_ <- %s", p->name);
++                            poldek_log(LOGERR, "_ <- %s", p->name);
+                         }
+-                        log(LOGERR, "_\n");
++                        poldek_log(LOGERR, "_\n");
+                     }
+                     
+                 } else {
+Index: rpm.c
+===================================================================
+RCS file: /cvsroot/installer/poldek/Attic/rpm.c,v
+retrieving revision 1.41.4.7
+diff -u -r1.41.4.7 rpm.c
+--- rpm.c	1 Sep 2004 19:01:15 -0000	1.41.4.7
++++ rpm.c	12 Oct 2004 20:56:02 -0000
+@@ -561,8 +561,8 @@
+         dbrec = rpmdb_it_get(&it);
+ 
+         if (dbrec == NULL) {
+-            log(LOGWARN, _("%s: rpm iterator returns NULL"
+-                           " (corrupted RPM database?). Ignored"), pkg->name);
++            logn(LOGWARN, _("%s: rpm iterator returns NULL"
++                            " (corrupted RPM database?). Ignored"), pkg->name);
+             count = 0;          /* assume that package isn't installed */
+ 
+         } else {
+@@ -691,7 +691,7 @@
+         return;
+     
+     if ((logpri & (LOGERR | LOGWARN)) == 0)
+-        vlog(logpri, 0, fmt, args);
++        poldek_vlog(logpri, 0, fmt, args);
+         
+     else {                  /* basename(path) */
+         char m[1024], *p, *q;
+@@ -715,7 +715,7 @@
+         if (strstr(m, "md5 OK") || strstr(m, "gpg OK") || strstr(m, "pgp OK"))
+             logpri |= LOGFILE;
+         
+-        log(logpri | LOGWARN, "%s\n", p);
++        poldek_log(logpri | LOGWARN, "%s\n", p);
+     }
+         
+     va_end(args);
+Index: rpm_install.c
+===================================================================
+RCS file: /cvsroot/installer/poldek/Attic/rpm_install.c,v
+retrieving revision 1.2.4.1
+diff -u -r1.2.4.1 rpm_install.c
+--- rpm_install.c	16 Feb 2004 19:39:57 -0000	1.2.4.1
++++ rpm_install.c	12 Oct 2004 20:56:03 -0000
+@@ -101,7 +101,7 @@
+         case RPMCALLBACK_INST_OPEN_FILE:
+             fd = Fopen(pkgpath, "r.ufdio");
+             if (fd == NULL || Ferror(fd)) {
+-                logn(LOGERR, "%s: %s", pkgpath, Fstrerror(fd));
++                logn(LOGERR, "%s: %s", (char *)pkgpath, Fstrerror(fd));
+                 if (fd)
+                     Fclose(fd);
+                 
+@@ -205,6 +205,7 @@
+     int rc;
+     Header h = NULL;
+ 
++    db = db;
+     
+     if (rootdir == NULL)
+         rootdir = "/";
+@@ -289,8 +290,8 @@
+             logn(LOGERR, _("%s: failed dependencies:"), path);
+                 
+ 
+-            printdepProblems(log_stream(), conflicts, numConflicts);
+-            if ((fstream = log_file_stream()))
++            printdepProblems(poldek_log_stream(), conflicts, numConflicts);
++            if ((fstream = poldek_log_file_stream()))
+                 printdepProblems(fstream, conflicts, numConflicts);
+             freeConflicts(conflicts, numConflicts);
+             goto l_err;
+@@ -314,8 +315,8 @@
+             probs = rpmtsProblems(ts);
+ #endif
+             logn(LOGERR, _("%s: installation failed:"), path);
+-            printProblems(log_stream(), probs);
+-            if ((fstream = log_file_stream()))
++            printProblems(poldek_log_stream(), probs);
++            if ((fstream = poldek_log_file_stream()))
+                 printProblems(fstream, probs);
+             goto l_err;
+             
+Index: rpm_signature.c
+===================================================================
+RCS file: /cvsroot/installer/poldek/Attic/rpm_signature.c,v
+retrieving revision 1.4.4.3
+diff -u -r1.4.4.3 rpm_signature.c
+--- rpm_signature.c	6 May 2004 07:03:58 -0000	1.4.4.3
++++ rpm_signature.c	12 Oct 2004 20:56:04 -0000
+@@ -229,7 +229,6 @@
+ 
+ int rpm_verify_signature(const char *path, unsigned flags) 
+ {
+-    const char                *argv[2];
+     unsigned                  presented_signs = 0;
+     struct rpmQVKArguments_s  qva; /* poor RPM API... */
+     rpmts                     ts;
+Index: rpminstall.c
+===================================================================
+RCS file: /cvsroot/installer/poldek/Attic/rpminstall.c,v
+retrieving revision 1.14.4.1
+diff -u -r1.14.4.1 rpminstall.c
+--- rpminstall.c	16 Feb 2004 19:39:57 -0000	1.14.4.1
++++ rpminstall.c	12 Oct 2004 20:56:04 -0000
+@@ -89,7 +89,7 @@
+             
+             buf[n] = '\0';
+             msg_tty(verbose_level, "_%s", buf);
+-            if (!log_enabled_filelog())
++            if (!poldek_log_enabled_filelog())
+                 continue;
+                 
+             for (i=0; i < n; i++) {
+Index: test_match.c
+===================================================================
+RCS file: /cvsroot/installer/poldek/test_match.c,v
+retrieving revision 1.8.4.4
+diff -u -r1.8.4.4 test_match.c
+--- test_match.c	1 Sep 2004 19:06:19 -0000	1.8.4.4
++++ test_match.c	12 Oct 2004 20:56:05 -0000
+@@ -159,7 +159,7 @@
+ int main(int argc, char *argv[]) 
+ {
+     rpmdb db;
+-    log_init(NULL, stdout, "");
++    poldek_log_init(NULL, stdout, "");
+ 
+     if (argc > 1 && strcmp(argv[1], "--promote") == 0)
+         poldek_conf_promote_epoch = 1;
+@@ -168,7 +168,7 @@
+     //dotest_dbmatch();
+ 
+     
+-    log_init(NULL, stdout, "aa");
++    poldek_log_init(NULL, stdout, "aa");
+     rpm_initlib(NULL);
+     db = rpm_opendb("/var/lib/rpm", "/", O_RDONLY);
+     dotest_dbmatch(db);
+Index: shell/desc.c
+===================================================================
+RCS file: /cvsroot/installer/poldek/shell/Attic/desc.c,v
+retrieving revision 1.18.4.3
+diff -u -r1.18.4.3 desc.c
+--- shell/desc.c	5 May 2004 16:56:43 -0000	1.18.4.3
++++ shell/desc.c	12 Oct 2004 20:56:06 -0000
+@@ -669,8 +669,8 @@
+ 
+     
+     if ((pkgu = pkg_info(pkg)) == NULL) {
+-        log(LOGERR, _("%s: description unavailable (index without packages "
+-                      "info loaded?)\n"), pkg_snprintf_s(pkg));
++        logn(LOGERR, _("%s: description unavailable (index without packages "
++                       "info loaded?)"), pkg_snprintf_s(pkg));
+         return;
+     }
+         
+Index: shell/ls.c
+===================================================================
+RCS file: /cvsroot/installer/poldek/shell/Attic/ls.c,v
+retrieving revision 1.20.4.1
+diff -u -r1.20.4.1 ls.c
+--- shell/ls.c	7 Dec 2003 21:30:46 -0000	1.20.4.1
++++ shell/ls.c	12 Oct 2004 20:56:07 -0000
+@@ -144,16 +144,16 @@
+             cmdarg->flags |= OPT_LS_UPGRADEABLE;
+             
+             if (cmdarg->sh_s->instpkgs == NULL) {
+-                log(LOGERR, _("ls: installed packages not loaded, "
+-                              "type \"reload\" to load them\n"));
++                logn(LOGERR, _("ls: installed packages not loaded, "
++                               "type \"reload\" to load them"));
+                 return EINVAL;
+             }
+             break;
+             
+         case 'I':
+             if (cmdarg->sh_s->instpkgs == NULL) {
+-                log(LOGERR, _("ls: installed packages not loaded, "
+-                              "type \"reload\" to load them\n"));
++                logn(LOGERR, _("ls: installed packages not loaded, "
++                               "type \"reload\" to load them"));
+                 return EINVAL;
+             }
+             
+Index: shell/uninstall.c
+===================================================================
+RCS file: /cvsroot/installer/poldek/shell/Attic/uninstall.c,v
+retrieving revision 1.19
+diff -u -r1.19 uninstall.c
+--- shell/uninstall.c	29 Sep 2002 19:49:38 -0000	1.19
++++ shell/uninstall.c	12 Oct 2004 20:56:07 -0000
+@@ -98,8 +98,8 @@
+     int i, err = 0, is_test = 1;
+     
+     if (cmdarg->sh_s->instpkgs == NULL) {
+-        log(LOGERR, "uninstall: installed packages not loaded, "
+-            "type \"reload\" to load them\n");
++        logn(LOGERR, "uninstall: installed packages not loaded, "
++             "type \"reload\" to load them");
+         return 0;
+     }
+     
+Index: vfile/vfprogress.c
+===================================================================
+RCS file: /cvsroot/installer/poldek/vfile/vfprogress.c,v
+retrieving revision 1.7.4.9
+diff -u -r1.7.4.9 vfprogress.c
+--- vfile/vfprogress.c	6 Oct 2004 12:48:33 -0000	1.7.4.9
++++ vfile/vfprogress.c	12 Oct 2004 20:56:08 -0000
+@@ -191,7 +191,7 @@
+ 
+         if (nn < bar->maxlen) {
+             int unit_n = bar->maxlen - nn;
+-            n_assert(sizeof(unit_line) > nn + unit_n);
++            n_assert((int)sizeof(unit_line) > nn + unit_n);
+             memset(&unit_line[nn], ' ', unit_n);
+         }
+         
