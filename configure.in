@@ -313,7 +313,7 @@ if test -z "$TRURL_DIR"; then
 		[AC_MSG_ERROR(["trurlib >= 0.43.5 not found"])], [$CONF_IN_LDFLAGS])
 else
 	LIBS="$LIBS -ltrurl"
-	AC_CONFIG_SUBDIRS(trurl)
+	AC_CONFIG_SUBDIRS(trurlib)
 fi
 
 AC_CONFIG_FILES([  po/Makefile.in
