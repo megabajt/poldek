@@ -38,5 +38,8 @@ fi
 
 
 runcmd ./configure $CONFOPTS
-cd trurl
-runcmd ./autogen.sh $CONFOPTS
+if [ -x trurlib/autogen.sh ];
+	cd trurlib
+	runcmd ./autogen.sh $CONFOPTS
+	cd ..
+fi
