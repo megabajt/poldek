@@ -2,7 +2,7 @@
 
 AUTOMAKE_OPTIONS = 
 SUBDIRS   = @TRURL_DIR@ vfile shell po intl conf
-DIST_SUBDIRS = trurl vfile shell po intl conf
+DIST_SUBDIRS = trurlib vfile shell po intl conf
 
 CFLAGS    = @CFLAGS@
 INCLUDES  = @TRURL_INCLUDE@
