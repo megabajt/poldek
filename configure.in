@@ -316,7 +316,7 @@ else
 fi
 
 
-AC_CONFIG_FILES([  po/Makefile.in m4/Makefile 
+AC_CONFIG_FILES([  po/Makefile.in
 		shell/Makefile
 		vfile/Makefile
 		vfile/vftp/Makefile

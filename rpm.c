@@ -26,10 +26,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#if defined HAVE_DB_185_H && defined DUPA
-# include <db_185.h>
-#endif
-
 #include <rpm/rpmlib.h>
 #include <rpm/rpmio.h>
 #include <rpm/rpmurl.h>
@@ -122,12 +118,18 @@ rpmdb rpm_opendb(const char *dbpath, const char *rootdir, mode_t mode)
     
     if (dbpath)
         addMacro(NULL, "_dbpath", NULL, dbpath, RMIL_DEFAULT);
-
+    
     if (rpmdbOpen(rootdir ? rootdir : "/", &db, mode, 0) != 0) {
         db = NULL;
         logn(LOGERR, _("%s%s: open rpm database failed"),
-            rootdir ? rootdir:"", dbpath ? dbpath : RPM_DBPATH);
+             rootdir ? rootdir:"", dbpath ? dbpath : RPM_DBPATH);
     }
+    
+#if ENABLE_TRACE    
+    DBGF("%p %d\n", db, db->nrefs);
+    system("ls -l /proc/$(echo `ps aux | grep poldek | grep -v grep` | awk '{print $2}')/fd/ | grep rpm");
+    sleep(3);
+#endif
     
     return db;
 }
@@ -165,7 +167,15 @@ time_t rpm_dbmtime(const char *dbfull_path)
 
 void rpm_closedb(rpmdb db) 
 {
+    DBGF("DB %p close %d\n", db, db->nrefs);
+    
     rpmdbClose(db);
+    
+#if ENABLE_TRACE        
+    system("ls -l /proc/$(echo `ps aux | grep poldek | grep -v grep` | awk '{print $2}')/fd/ | grep rpm");
+    sleep(3);
+#endif
+    
     db = NULL;
 }
 
@@ -789,7 +799,7 @@ int rpm_is_pkg_installed(rpmdb db, const struct pkg *pkg, int *cmprc,
     int count = 0;
     struct rpmdb_it it;
     const struct dbrec *dbrec;
-    
+
     rpmdb_it_init(db, &it, RPMITER_NAME, pkg->name);
     count = rpmdb_it_get_count(&it);
     if (count > 0 && (cmprc || dbrecp)) {
@@ -849,7 +859,8 @@ tn_array *rpm_get_conflicted_dbpkgs(rpmdb db, const struct capreq *cap,
         
         n_array_push(dbpkgs, dbpkg_new(dbrec->recno, dbrec->h, ldflags));
     }
-
+    
+    rpmdb_it_destroy(&it);
     return dbpkgs;
 }
 
@@ -875,142 +886,10 @@ tn_array *rpm_get_provides_dbpkgs(rpmdb db, const struct capreq *cap,
         
         n_array_push(dbpkgs, dbpkg_new(dbrec->recno, dbrec->h, ldflags));
     }
-
+    
+    rpmdb_it_destroy(&it);
     return dbpkgs;
 }
-
-/* rpmlib's rpmCheckSig reports success when GPG signature is missing,
-   so it is useless for real sig verification */
-#if !defined HAVE_RPM_4_0 || defined HAVE_RPM_4_1
-static int rpm_signatures(const char *path, unsigned *signature_flags)
-{
-    //*signature_flags = CHECKSIG_MD5;
-    path = path;
-    return 1;
-}
-#else
-static int rpm_signatures(const char *path, unsigned *signature_flags) 
-{
-    unsigned        flags;
-    FD_t            fdt;
-    struct rpmlead  lead;
-    Header          sign = NULL;
-    int32_t         tag, type, cnt;
-    const void      *ptr;
-    HeaderIterator  it;
-
-    *signature_flags = 0;
-    
-    fdt = Fopen(path, "r.fdio");
-    if (fdt == NULL || Ferror(fdt)) {
-//        logn("open %s: %s", path, Fstrerror(fdt));
-        if (fdt)
-            Fclose(fdt);
-        return 0;
-    }
-
-    if (readLead(fdt, &lead)) {
-        logn(LOGERR, "%s: read package lead failed", path);
-        Fclose(fdt);
-        return 0;
-    }
-    
-    if (rpmReadSignature(fdt, &sign, lead.signature_type) != 0) {
-        logn(LOGERR, "%s: read package signature failed", path);
-        Fclose(fdt);
-        return 0;
-    }
-
-    Fclose(fdt);
-    
-    if (sign == NULL) {
-        logn(LOGERR, "%s: no signatures available", path);
-        Fclose(fdt);
-        return 0;
-    }
-
-    flags = 0;
-    it = headerInitIterator(sign);
-    
-    while (headerNextIterator(it, &tag, &type, &ptr, &cnt)) {
-        switch (tag) {
-	    case RPMSIGTAG_PGP5:	/* XXX legacy */
-	    case RPMSIGTAG_PGP:
-		flags |= CHECKSIG_PGP;
-		break;
-                
-	    case RPMSIGTAG_GPG:
-		flags |= CHECKSIG_GPG;
-                break;
-                
-	    case RPMSIGTAG_LEMD5_2:
-	    case RPMSIGTAG_LEMD5_1:
-	    case RPMSIGTAG_MD5:
-		flags |= CHECKSIG_MD5;
-		break;
-                
-	    default:
-		continue;
-		break;
-        }
-        ptr = headerFreeData(ptr, type);
-    }
-
-    headerFreeIterator(it);
-    rpmFreeSignature(sign);
-    *signature_flags = flags;
-    return 1;
-}
-
-#endif HAVE_RPM_4_0
-
-#ifdef HAVE_RPMCHECKSIG
-int rpm_verify_signature(const char *path, unsigned flags) 
-{
-    const char *argv[2];
-    unsigned presented_signs;
-
-    n_assert(flags & (CHECKSIG_MD5 | CHECKSIG_GPG | CHECKSIG_PGP));
-
-    if ((flags & (CHECKSIG_GPG | CHECKSIG_PGP))) {
-        presented_signs = 0;
-        
-        if (!rpm_signatures(path, &presented_signs)) {
-            logn(LOGERR, "dupa\n");
-            return 0;
-        }
-        	
-        
-        if ((presented_signs & flags) == 0) {
-            char signam[255];
-            int n = 0;
-            
-            if (flags & CHECKSIG_MD5)
-                n += n_snprintf(&signam[n], sizeof(signam) - n, "md5/");
-            
-            if (flags & CHECKSIG_GPG)
-                n += n_snprintf(&signam[n], sizeof(signam) - n, "gpg/");
-            
-            if (flags & CHECKSIG_PGP)
-                n += n_snprintf(&signam[n], sizeof(signam) - n, "pgp/");
-            
-            n_assert(n > 0);
-            signam[n - 1] = '\0';   /* eat last '/' */
-            logn(LOGWARN, _("%s: %s signature not found"), n_basenam(path),
-                 signam);
-            return 0;
-        }
-    }
-    	
-    
-
-    argv[0] = path;
-    argv[1] = NULL;
-
-    return rpmCheckSig(flags, argv) == 0;
-}
-#endif
-
 
 #if defined HAVE_RPMLOG && !defined ENABLE_STATIC
 /* hack: rpmlib dumps messges to stdout only... (AFAIK)  */
