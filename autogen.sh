@@ -36,10 +36,9 @@ if [ ! -f depcomp ]; then
     (cd shell && ln -sf ../depcomp .)
 fi
 
-
-runcmd ./configure $CONFOPTS
-if [ -x trurlib/autogen.sh ]; then
+if [ -x ./trurlib/autogen.sh ]; then
 	cd trurlib
 	runcmd ./autogen.sh $CONFOPTS
 	cd ..
 fi
+runcmd ./configure $CONFOPTS
