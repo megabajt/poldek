@@ -38,3 +38,5 @@ fi
 
 
 runcmd ./configure $CONFOPTS
+cd trurl
+runcmd ./autogen.sh $CONFOPTS
