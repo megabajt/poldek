@@ -316,7 +316,7 @@ else
 fi
 
 
-AC_CONFIG_FILES([ 
+AC_CONFIG_FILES([  po/Makefile.in m4/Makefile 
 		shell/Makefile
 		vfile/Makefile
 		vfile/vftp/Makefile
@@ -325,8 +325,6 @@ AC_CONFIG_FILES([
 		poldek.spec
 		poldek-suse.spec
 		homepage.sgml
-		intl/Makefile 
-		po/Makefile.in
 	])
 AC_OUTPUT
 
