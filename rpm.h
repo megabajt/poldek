@@ -84,15 +84,15 @@ int rpm_install(rpmdb db, const char *rootdir, const char *path,
 
 #ifdef HAVE_RPM_4_1
 # include <rpm/rpmcli.h>
-# define POLDEK_VRFY_DGST     VERIFY_DIGEST
-# define POLDEK_VRFY_SIGN     VERIFY_SIGNATURE
-# define POLDEK_VRFY_SIGNGPG  VERIFY_SIGNATURE
-# define POLDEK_VRFY_SIGNPGP  VERIFY_SIGNATURE
+# define VRFYSIG_DGST     VERIFY_DIGEST
+# define VRFYSIG_SIGN     VERIFY_SIGNATURE
+# define VRFYSIG_SIGNGPG  VERIFY_SIGNATURE
+# define VRFYSIG_SIGNPGP  VERIFY_SIGNATURE
 #else
-# define POLDEK_VRFY_DGST     CHECKSIG_MD5
-# define POLDEK_VRFY_SIGN     CHECKSIG_GPG
-# define POLDEK_VRFY_SIGNGPG  CHECKSIG_GPG
-# define POLDEK_VRFY_SIGNPGP  CHECKSIG_PGP
+# define VRFYSIG_DGST     CHECKSIG_MD5
+# define VRFYSIG_SIGN     CHECKSIG_GPG
+# define VRFYSIG_SIGNGPG  CHECKSIG_GPG
+# define VRFYSIG_SIGNPGP  CHECKSIG_PGP
 #endif
 
 int rpm_verify_signature(const char *path, unsigned flags);

@@ -52,13 +52,13 @@ int package_verify_sign(const char *path, unsigned flags)
     
     
     if (flags & PKGVERIFY_GPG)
-        rpmflags |= POLDEK_VRFY_SIGNGPG;
+        rpmflags |= VRFYSIG_SIGNGPG;
 
     if (flags & PKGVERIFY_PGP)
-        rpmflags |= POLDEK_VRFY_SIGNPGP;
+        rpmflags |= VRFYSIG_SIGNPGP;
     
     if (flags & PKGVERIFY_MD)
-        rpmflags |= POLDEK_VRFY_DGST;
+        rpmflags |= VRFYSIG_DGST;
 
     return rpm_verify_signature(path, rpmflags);
 }

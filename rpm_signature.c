@@ -52,17 +52,30 @@
 #include "capreq.h"
 #include "rpmdb_it.h"
 
+
+
+static int rpm_read_signature(FD_t fd, Header *sighp, int sig_type)
+{
+#ifdef HAVE_RPM_4_1
+    return rpmReadSignature(fd, sighp, sig_type) == 0;
+#elif HAVE_RPM_4_0
+    return rpmReadSignature(fd, sighp, sig_type, NULL) == 0;
+#endif
+    return 0;
+}
+
+
 /* rpmlib's rpmCheckSig reports success when GPG signature is missing,
    so it is useless for real sig verification */
 #if !defined HAVE_RPM_4_0
 static int rpm_signatures(const char *path, unsigned *signature_flags, FD_t *fd)
 {
-    *signature_flags = POLDEK_VRFY_DGST;
+    *signature_flags = VRFYSIG_DGST;
     path = path;
     return 1;
 }
 
-#else 
+#else  /* 4.x series  */
 static int rpm_signatures(const char *path, unsigned *signature_flags, FD_t *fd) 
 {
     unsigned        flags;
@@ -75,28 +88,27 @@ static int rpm_signatures(const char *path, unsigned *signature_flags, FD_t *fd)
 
     *signature_flags = 0;
     
-    fdt = Fopen(path, "r.fdio");
+    fdt = Fopen(path, "r.ufdio");
     if (fdt == NULL || Ferror(fdt)) {
-//        logn("open %s: %s", path, Fstrerror(fdt));
         if (fdt)
             Fclose(fdt);
         return 0;
     }
 
-    if (readLead(fdt, &lead)) {
+    if (readLead(fdt, &lead) != 0) {
         logn(LOGERR, "%s: read package lead failed", path);
         Fclose(fdt);
         return 0;
     }
-    
-    if (rpmReadSignature(fdt, &sign, lead.signature_type) != 0) {
-        logn(LOGERR, "%s: read package signature failed", path);
+
+    if (!rpm_read_signature(fdt, &sign, lead.signature_type)) {
+        logn(LOGERR, "%s: read package signature failed", n_basenam(path));
         Fclose(fdt);
         return 0;
     }
     
     if (sign == NULL) {
-        logn(LOGERR, "%s: no signatures available", path);
+        logn(LOGERR, "%s: no signatures available", n_basenam(path));
         Fclose(fdt);
         return 0;
     }
@@ -120,20 +132,20 @@ static int rpm_signatures(const char *path, unsigned *signature_flags, FD_t *fd)
 #endif                
 	    case RPMSIGTAG_PGP5:	/* XXX legacy */
 	    case RPMSIGTAG_PGP:
-		flags |= POLDEK_VRFY_SIGNPGP;
+		flags |= VRFYSIG_SIGNPGP;
 		break;
 
 #ifdef HAVE_RPM_4_1
             case RPMSIGTAG_DSA:
 #endif                
 	    case RPMSIGTAG_GPG:
-		flags |= POLDEK_VRFY_SIGNGPG;
+		flags |= VRFYSIG_SIGNGPG;
                 break;
                 
 	    case RPMSIGTAG_LEMD5_2:
 	    case RPMSIGTAG_LEMD5_1:
 	    case RPMSIGTAG_MD5:
-		flags |= POLDEK_VRFY_DGST;
+		flags |= VRFYSIG_DGST;
 		break;
                 
 	    default:
@@ -213,21 +225,10 @@ int rpm_verify_signature(const char *path, unsigned flags)
     rpmts                     ts;
     FD_t                      fdt = NULL;
     int                       rc;
-#ifdef HAVE_RPM_4_1
-    static int                warn_printed  = 0;
-#endif    
 
-    n_assert(flags & (POLDEK_VRFY_DGST |
-                      POLDEK_VRFY_SIGNGPG | POLDEK_VRFY_SIGNPGP));
-
-#ifdef HAVE_RPM_4_1
-    if (!warn_printed && (flags & (POLDEK_VRFY_SIGNGPG | POLDEK_VRFY_SIGNPGP))) {
-        logn(LOGWARN, "Package signature verification for rpm 4.1 "
-             "not implemented yet");
-        warn_printed = 1;
-    }
-    return 1;
-#endif
+    
+    n_assert(flags & (VRFYSIG_DGST |
+                      VRFYSIG_SIGNGPG | VRFYSIG_SIGNPGP));
     
     if (!rpm_signatures(path, &presented_signs, NULL))
         return 0;
@@ -236,13 +237,13 @@ int rpm_verify_signature(const char *path, unsigned flags)
         char signam[255];
         int n = 0;
             
-        if (flags & POLDEK_VRFY_DGST)
+        if (flags & VRFYSIG_DGST)
             n += n_snprintf(&signam[n], sizeof(signam) - n, "digest/");
             
-        if (flags & POLDEK_VRFY_SIGNGPG)
+        if (flags & VRFYSIG_SIGNGPG)
             n += n_snprintf(&signam[n], sizeof(signam) - n, "gpg/");
             
-        if (flags & POLDEK_VRFY_SIGNPGP)
+        if (flags & VRFYSIG_SIGNPGP)
             n += n_snprintf(&signam[n], sizeof(signam) - n, "pgp/");
             
         n_assert(n > 0);
@@ -254,14 +255,22 @@ int rpm_verify_signature(const char *path, unsigned flags)
     
     memset(&qva, '\0', sizeof(qva));
     qva.qva_flags = flags;
-    ts = rpmtsCreate();
+    
 
+    rc = -1;
     fdt = Fopen(path, "r.ufdio");
-    printf("rpmVerifySignatures %p %p %p %s\n", &qva, ts, fdt, path);
-    rc = (rpmVerifySignatures(&qva, ts, fdt, n_basenam(path)) == 0);
 
-    rpmtsFree(ts);
-    Fclose(fdt);
+    if (fdt != NULL && Ferror(fdt) == 0) {
+        ts = rpmtsCreate();
+        rc = rpmVerifySignatures(&qva, ts, fdt, n_basenam(path));
+        rpmtsFree(ts);
+        
+        DBGF("rpmVerifySignatures %s %s\n", n_basenam(path), rc == 0 ? "OK" : "BAD");
+    }
+    
+    if (fdt)
+        Fclose(fdt);
+    
     return rc == 0;
 }
 
